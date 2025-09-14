@@ -3,10 +3,7 @@ package com.hospital.hospital_Application.controller;
 
 import com.hospital.hospital_Application.entity.User;
 import com.hospital.hospital_Application.repository.UserRepository;
-import com.hospital.hospital_Application.service.AuthService;
-import com.hospital.hospital_Application.service.EmailService;
-import com.hospital.hospital_Application.service.OtpService;
-import com.hospital.hospital_Application.service.SmsService;
+import com.hospital.hospital_Application.service.*;
 import com.hospital.hospital_Application.utility.utility.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -33,6 +30,8 @@ public class AuthController {
     private  PasswordEncoder passwordEncoder;
     @Autowired
     private JwtUtil jwtUtil;
+    @Autowired
+    private otpverService otpverService;
 
     @Autowired
     private SmsService smsService;
@@ -188,28 +187,41 @@ public class AuthController {
     }
 
 
-    @PostMapping("/verify")
-    public ResponseEntity<?> verifyOtp(@RequestParam String mobile, @RequestParam String otp) {
-        boolean isValid = otpService.verifyMobileOtp(mobile, otp);
-
-        if (isValid) {
-            return ResponseEntity.ok("OTP verified successfully!");
-        } else {
-            return ResponseEntity.badRequest().body("Invalid or expired OTP");
+    // Step A: Generate OTP
+    @PostMapping("/generate-otp")
+    public ResponseEntity<?> generateOtp(@RequestParam String mobile) {
+        Optional<User> userOpt = userRepository.findByPhone(mobile);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.badRequest().body("Mobile number not registered!");
         }
+
+        otpverService.generateAndSendOtp(userOpt.get());
+        return ResponseEntity.ok("OTP sent to your registered email!");
     }
 
-    @PostMapping("/generate")
-    public ResponseEntity<?> generateOtp(@RequestParam String mobile) {
-        if (!mobile.matches("^[0-9]{10}$")) {
-            return ResponseEntity.badRequest().body("Invalid mobile number. Must be 10 digits.");
+    // Step B: Verify OTP and login
+//    @PostMapping("/verify-otp")
+//    public ResponseEntity<?> verifyOtp(@RequestParam String mobile, @RequestParam String otp) {
+//        boolean valid = otpverService.verifyOtp(mobile, otp);
+//        if (!valid) {
+//            return ResponseEntity.badRequest().body("Invalid or expired OTP!");
+//        }
+//
+//        User user = userRepository.findByPhone(mobile).get();
+////        String token = jwtUtil.generateToken(user.getEmail());
+//
+//        return ResponseEntity.ok(Map.of("message", "Login successful!"));
+//    }
+
+    @PostMapping("/verify")
+    public ResponseEntity<?> verifyOtp(@RequestParam String mobile, @RequestParam String otp) {
+        boolean isValid = otpverService.verifyOtp(mobile, otp);
+
+        if (!isValid) {
+            return ResponseEntity.badRequest().body("Invalid or expired OTP!");
         }
 
-        String otp = otpService.generateMobileOtp(mobile);
-
-        smsService.sendOtp(mobile, otp); // real SMS sent
-
-        return ResponseEntity.ok("OTP sent successfully to your mobile!");
+        return ResponseEntity.ok("OTP verified successfully! You can now login.");
     }
 
 }
